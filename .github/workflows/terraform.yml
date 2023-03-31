@@ -97,7 +97,7 @@ jobs:
           PRIVATE_KEY : ${{ secrets.EC2_PRIVATE_KEY  }}
           USER_NAME   : ${{ secrets.EC2_USER  }}
       run: |
-        ec2_public_ip=`aws --region us-east-1 ec2 describe-instances  --filters "Name= tag:Name,Values=Terraform-Instance" --query 'Reservations[*].Instances[*].[PublicIpAddress]' --output text`
+        ec2_public_ip=`aws --region ap-south-1 ec2 describe-instances  --filters "Name= tag:Name,Values=Terraform-Instance" --query 'Reservations[*].Instances[*].[PublicIpAddress]' --output text`
         ssh -o StrictHostKeyChecking=no -i ${{ secrets.EC2_PRIVATE_KEY_NAME  }} ${USER_NAME}@${ec2_public_ip} '
         chmod +x scripts/nginx.sh
         bash scripts/nginx.sh
