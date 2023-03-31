@@ -21,7 +21,7 @@ jobs:
     - name: Connecting GitHub Actions To AWS Using OIDC - Roles
       uses: aws-actions/configure-aws-credentials@v1
       with:
-        aws-region: us-east-1
+        aws-region: ap-south-1
         role-to-assume: arn:aws:iam::491777624522:role/github-actions-role
         role-session-name: github-actions-session
  
@@ -75,7 +75,7 @@ jobs:
           PRIVATE_KEY : ${{ secrets.EC2_PRIVATE_KEY  }}
           USER_NAME   : ${{ secrets.EC2_USER  }}
       run: |
-        ec2_public_ip=`aws --region us-east-1 ec2 describe-instances  --filters "Name= tag:Name,Values=Terraform-Instance" --query 'Reservations[*].Instances[*].[PublicIpAddress]' --output text`
+        ec2_public_ip=`aws --region ap-south-1 ec2 describe-instances  --filters "Name= tag:Name,Values=Terraform-Instance" --query 'Reservations[*].Instances[*].[PublicIpAddress]' --output text`
         echo "$PRIVATE_KEY" > ${{ secrets.EC2_PRIVATE_KEY_NAME  }} && chmod 400 ${{ secrets.EC2_PRIVATE_KEY_NAME  }}
         ssh -o StrictHostKeyChecking=no -i ${{ secrets.EC2_PRIVATE_KEY_NAME  }} ${USER_NAME}@${ec2_public_ip} '
         WORKING_DIR=${{ secrets.DIR_PATH_OF_SCRIPTS  }}
