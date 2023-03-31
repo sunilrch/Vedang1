@@ -1,0 +1,110 @@
+name: Terraform Setup
+
+on:
+  push:
+    branches: 
+      - main
+
+jobs:
+  build:
+    permissions:
+      id-token: write    # Job to connect to Identity Token to receive the token
+      contents: read     # Read access to the repository
+    runs-on:
+       - ubuntu-latest
+       
+    steps:
+    # Checkout Repository
+    - name : Check out Git Repository
+      uses: actions/checkout@v3  
+      
+    - name: Connecting GitHub Actions To AWS Using OIDC - Roles
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-region: us-east-1
+        role-to-assume: arn:aws:iam::096789505645:role/github-actions-openid-role
+        role-session-name: github-actions-session
+ 
+   # Terraform Operations
+    - name : Terraform Setup
+      uses: hashicorp/setup-terraform@v2
+      
+    - name: Terraform Init
+      id: init
+      run: terraform init
+
+    - name: Terraform Validate
+      id: validate
+      run: terraform validate -no-color
+    
+    - name: Terraform Plan
+      id: plan
+      if: ${{ github.event_name == 'push' }}
+      run: |
+        terraform plan -refresh=false  -no-color -out out.plan
+      continue-on-error: false
+      
+    - name: Terraform Plan Status
+      if: ${{ steps.plan.outcome == 'failure' }}
+      run: exit 1
+      
+    - name: Terraform Apply
+      id: apply
+      if: ${{ github.event_name == 'push' }}
+      run: |
+        terraform apply --auto-approve
+      continue-on-error: true
+      
+    - name: Terraform Apply Status
+      if: ${{ steps.apply.outcome == 'failure' }}
+      run: exit 1
+
+   # Public IP of Github Actions
+    - name: Public IP of Github Hosted Runner
+      id: ip
+      uses: haythem/public-ip@v1.3
+      
+    
+    - name: Add Github Actions IP to Security group
+      run: |
+          ec2_sg_id=`aws ec2 describe-security-groups --group-names ${{ secrets.AWS_EC2_SG_NAME }} --query 'SecurityGroups[*].[GroupId]' --output text`
+          aws ec2 authorize-security-group-ingress --group-id $ec2_sg_id --protocol tcp --port 22 --cidr ${{ steps.ip.outputs.ipv4 }}/32
+       
+    - name: Delete Script files if Already Existing
+      env:
+          PRIVATE_KEY : ${{ secrets.EC2_PRIVATE_KEY  }}
+          USER_NAME   : ${{ secrets.EC2_USER  }}
+      run: |
+        ec2_public_ip=`aws --region us-east-1 ec2 describe-instances  --filters "Name= tag:Name,Values=Terraform-Instance" --query 'Reservations[*].Instances[*].[PublicIpAddress]' --output text`
+        echo "$PRIVATE_KEY" > ${{ secrets.EC2_PRIVATE_KEY_NAME  }} && chmod 400 ${{ secrets.EC2_PRIVATE_KEY_NAME  }}
+        ssh -o StrictHostKeyChecking=no -i ${{ secrets.EC2_PRIVATE_KEY_NAME  }} ${USER_NAME}@${ec2_public_ip} '
+        WORKING_DIR=${{ secrets.DIR_PATH_OF_SCRIPTS  }}
+        if [ -d "$WORKING_DIR" ]; then rm -Rf $WORKING_DIR; fi
+        '
+  
+    - name: Copy Script files via ssh password
+      uses: appleboy/scp-action@master
+      with:
+        host: 3.239.45.46
+        username: ${{ secrets.EC2_USER  }}
+        key: ${{ secrets.EC2_PRIVATE_KEY  }}
+        source: "scripts/nginx.sh"
+        target: "."
+   
+    
+    - name: Deploy Nginx Script in Terraform EC2 Instance
+      env:
+          PRIVATE_KEY : ${{ secrets.EC2_PRIVATE_KEY  }}
+          USER_NAME   : ${{ secrets.EC2_USER  }}
+      run: |
+        ec2_public_ip=`aws --region us-east-1 ec2 describe-instances  --filters "Name= tag:Name,Values=Terraform-Instance" --query 'Reservations[*].Instances[*].[PublicIpAddress]' --output text`
+        ssh -o StrictHostKeyChecking=no -i ${{ secrets.EC2_PRIVATE_KEY_NAME  }} ${USER_NAME}@${ec2_public_ip} '
+        chmod +x scripts/nginx.sh
+        bash scripts/nginx.sh
+        '
+        
+    - name: Remove Github Actions IP from security group
+      run: |
+        ec2_sg_id=`aws ec2 describe-security-groups --group-names ${{ secrets.AWS_EC2_SG_NAME }} --query 'SecurityGroups[*].[GroupId]' --output text`
+        aws ec2 revoke-security-group-ingress --group-id $ec2_sg_id  --protocol tcp --port 22 --cidr ${{ steps.ip.outputs.ipv4 }}/32
+      if: always() 
