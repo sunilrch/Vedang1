@@ -22,7 +22,7 @@ jobs:
       uses: aws-actions/configure-aws-credentials@v1
       with:
         aws-region: us-east-1
-        role-to-assume: arn:aws:iam::096789505645:role/github-actions-openid-role
+        role-to-assume: arn:aws:iam::491777624522:role/github-actions-role
         role-session-name: github-actions-session
  
    # Terraform Operations
